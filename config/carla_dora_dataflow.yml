@@ -1,0 +1,39 @@
+# CARLA-DORA Autonomous Driving Dataflow
+# This dataflow connects sensor data from CARLA to control commands
+
+nodes:
+  # Sensor receiver node - receives data from CARLA via UDP
+  - id: sensor_receiver
+    operator:
+      python: dora_nodes/sensors/sensor_receiver.py
+      outputs:
+        - gps
+        - imu
+        - speed
+        - camera_info
+    env:
+      PYTHONUNBUFFERED: "1"
+
+  # Planning node - generates driving plan
+  - id: planner
+    operator:
+      python: dora_nodes/planning/simple_planner.py
+      inputs:
+        gps: sensor_receiver/gps
+        speed: sensor_receiver/speed
+      outputs:
+        - plan
+    env:
+      PYTHONUNBUFFERED: "1"
+
+  # Control node - converts plan to vehicle control
+  - id: controller
+    operator:
+      python: dora_nodes/control/vehicle_controller.py
+      inputs:
+        plan: planner/plan
+        speed: sensor_receiver/speed
+      outputs:
+        - control
+    env:
+      PYTHONUNBUFFERED: "1"

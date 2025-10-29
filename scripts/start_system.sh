@@ -1,52 +1,83 @@
 #!/bin/bash
 
-# Complete System Launcher
-# Starts both CARLA agent and DORA dataflow
+# CARLA-DORA Complete System Launcher
+# This is a convenience script that helps coordinate all three components
 
 set -e
 
-echo "=================================="
+echo "========================================"
 echo "CARLA-DORA System Launcher"
-echo "=================================="
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-echo "This script will start both CARLA agent and DORA dataflow"
-echo "Make sure CARLA server is already running!"
+echo "========================================"
+echo ""
+echo "This script will help you start the complete system."
+echo "You need to run components in 3 separate terminals."
+echo ""
+echo "========================================"
+echo "TERMINAL SETUP GUIDE"
+echo "========================================"
+echo ""
+echo "Terminal 1 - CARLA Server:"
+echo "  cd \$CARLA_ROOT"
+echo "  ./CarlaUE4.sh"
+echo ""
+echo "Terminal 2 - DORA Dataflow:"
+echo "  cd $(pwd)"
+echo "  ./scripts/start_dora.sh"
+echo ""
+echo "Terminal 3 - CARLA Agent:"
+echo "  cd $(pwd)"
+echo "  ./scripts/start_carla_agent.sh"
+echo ""
+echo "========================================"
+echo "ENVIRONMENT CHECK"
+echo "========================================"
 echo ""
 
-# Start DORA in background
-echo "Step 1: Starting DORA dataflow..."
-"$SCRIPT_DIR/start_dora.sh" &
-DORA_PID=$!
+# Check CARLA_ROOT
+if [ -z "$CARLA_ROOT" ]; then
+    echo "⚠️  CARLA_ROOT not set!"
+    echo "   Please set: export CARLA_ROOT=/path/to/carla"
+else
+    echo "✅ CARLA_ROOT: $CARLA_ROOT"
+fi
 
-# Wait a bit for DORA to initialize
-sleep 3
+# Check LEADERBOARD_ROOT
+if [ -z "$LEADERBOARD_ROOT" ]; then
+    echo "⚠️  LEADERBOARD_ROOT not set!"
+    echo "   Please set: export LEADERBOARD_ROOT=/path/to/leaderboard"
+else
+    echo "✅ LEADERBOARD_ROOT: $LEADERBOARD_ROOT"
+fi
 
-# Start CARLA agent
+# Check SCENARIO_RUNNER_ROOT
+if [ -z "$SCENARIO_RUNNER_ROOT" ]; then
+    echo "⚠️  SCENARIO_RUNNER_ROOT not set!"
+    echo "   Please set: export SCENARIO_RUNNER_ROOT=/path/to/scenario_runner"
+else
+    echo "✅ SCENARIO_RUNNER_ROOT: $SCENARIO_RUNNER_ROOT"
+fi
+
 echo ""
-echo "Step 2: Starting CARLA agent..."
-"$SCRIPT_DIR/start_carla_agent.sh" &
-CARLA_PID=$!
+
+# Check if CARLA is running
+if nc -z localhost 2000 2>/dev/null; then
+    echo "✅ CARLA server is running on port 2000"
+else
+    echo "⚠️  CARLA server is NOT running on port 2000"
+    echo "   Start it in Terminal 1 first!"
+fi
 
 echo ""
-echo "System started!"
-echo "DORA PID: $DORA_PID"
-echo "CARLA Agent PID: $CARLA_PID"
+echo "========================================"
+echo "QUICK START COMMANDS"
+echo "========================================"
 echo ""
-echo "Press Ctrl+C to stop all processes"
-
-# Cleanup function
-cleanup() {
-    echo ""
-    echo "Stopping all processes..."
-    kill $DORA_PID 2>/dev/null || true
-    kill $CARLA_PID 2>/dev/null || true
-    echo "Done."
-    exit 0
-}
-
-trap cleanup SIGINT SIGTERM
-
-# Wait for processes
-wait
+echo "If you just want to start DORA and Agent (assuming CARLA is running):"
+echo ""
+echo "# In one terminal:"
+echo "./scripts/start_dora.sh"
+echo ""
+echo "# In another terminal:"
+echo "./scripts/start_carla_agent.sh"
+echo ""
+echo "========================================"

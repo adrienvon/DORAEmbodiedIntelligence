@@ -36,6 +36,14 @@ fi
 # Change to project root
 cd "$PROJECT_ROOT"
 
+# Activate uv virtual environment (统一环境管理)
+echo ""
+echo "Activating uv virtual environment..."
+source "$PROJECT_ROOT/.venv/bin/activate"
+
+echo "Python: $(which python)"
+echo "Python version: $(python --version)"
+
 echo ""
 echo "Starting DORA dataflow..."
 echo "Press Ctrl+C to stop"

@@ -41,7 +41,7 @@ if ! nc -z localhost 2000 2>/dev/null; then
 fi
 
 # Set Python path
-export PYTHONPATH="$CARLA_ROOT/PythonAPI/carla/dist/carla-0.9.10-py3.7-linux-x86_64.egg:$LEADERBOARD_ROOT:$SCENARIO_RUNNER_ROOT:$PROJECT_ROOT:$PYTHONPATH"
+export PYTHONPATH="$CARLA_ROOT/PythonAPI/carla/dist/carla-0.9.14-py3.7-linux-x86_64.egg:$LEADERBOARD_ROOT:$SCENARIO_RUNNER_ROOT:$PROJECT_ROOT:$PYTHONPATH"
 
 echo ""
 echo "Starting CARLA Leaderboard..."

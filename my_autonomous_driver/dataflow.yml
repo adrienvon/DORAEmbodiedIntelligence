@@ -1,0 +1,95 @@
+################################################################################
+# DORA Autonomous Driving Dataflow Configuration
+#
+# This dataflow defines the complete pipeline for autonomous vehicle control:
+#
+# Data Flow Architecture:
+#   CARLA Simulator
+#       ↓ (UDP/TCP network sockets)
+#   receiver_node (Bridge: CARLA → DORA)
+#       ↓ (DORA topics: gnss_data, imu_data, lidar_data)
+#   planner_operator (Pure Pursuit Algorithm)
+#       ↓ (DORA topic: control_cmd)
+#   control_node (Bridge: DORA → CARLA)
+#       ↓ (UDP network socket)
+#   CARLA Agent
+#
+# Components:
+#   1. receiver_node: Receives sensor data from CARLA via network
+#   2. planner_operator: Computes steering/throttle/brake commands
+#   3. control_node: Sends control commands back to CARLA
+#
+# Author: DORA Autonomous Driving Team
+# Date: 2025-10-31
+################################################################################
+
+nodes:
+  # ============================================================================
+  # RECEIVER NODE - CARLA to DORA Bridge
+  # ============================================================================
+  # Receives sensor data from CARLA simulator via network sockets and publishes
+  # them as DORA outputs for downstream processing.
+  #
+  # Network Inputs:
+  #   - UDP port 12345: GNSS and IMU data (JSON format)
+  #   - TCP port 5005: LiDAR point cloud data (binary format)
+  #
+  # DORA Outputs:
+  #   - gnss_data: Vehicle position (latitude, longitude, altitude)
+  #   - imu_data: Inertial measurement (acceleration, gyroscope, orientation)
+  #   - lidar_data: LiDAR point cloud (binary format)
+  # ============================================================================
+  - id: receiver_node
+    custom:
+      source: nodes/receiver_node.py
+    inputs:
+      tick: dora/timer/millis/100  # Poll for sensor data every 100ms (10 Hz)
+    outputs:
+      - gnss_data
+      - imu_data
+      - lidar_data
+
+  # ============================================================================
+  # PLANNER OPERATOR - Pure Pursuit Path Tracking
+  # ============================================================================
+  # Implements the Pure Pursuit algorithm to compute steering commands that
+  # follow a predefined path based on the vehicle's current position.
+  #
+  # Algorithm:
+  #   1. Extract vehicle position from GNSS data
+  #   2. Find lookahead point on the path
+  #   3. Calculate steering angle using Pure Pursuit formula
+  #   4. Output control commands (steer, throttle, brake)
+  #
+  # DORA Inputs:
+  #   - gnss_data: Current vehicle position from receiver_node
+  #
+  # DORA Outputs:
+  #   - control_cmd: Control commands {steer, throttle, brake}
+  # ============================================================================
+  - id: planner_operator
+    operator:
+      python: operators/planner_operator.py
+      inputs:
+        gnss_data: receiver_node/gnss_data
+      outputs:
+        - control_cmd
+
+  # ============================================================================
+  # CONTROL NODE - DORA to CARLA Bridge
+  # ============================================================================
+  # Sends control commands from the planner back to the CARLA agent via UDP.
+  # Handles command validation, serialization, and network transmission with
+  # retry logic for robustness.
+  #
+  # DORA Inputs:
+  #   - control_cmd: Control commands from planner_operator
+  #
+  # Network Output:
+  #   - UDP to 192.168.1.1:23456: Control commands (JSON format)
+  # ============================================================================
+  - id: control_node
+    custom:
+      source: nodes/control_node.py
+    inputs:
+      control_cmd: planner_operator/control_cmd

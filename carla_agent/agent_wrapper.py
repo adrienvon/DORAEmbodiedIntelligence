@@ -11,6 +11,25 @@ import msgpack
 import numpy as np
 from typing import Dict, Any, Optional
 
+# Import Track enum from Leaderboard
+try:
+    from leaderboard.autoagents.autonomous_agent import Track
+    from leaderboard.envs.sensor_interface import SensorInterface
+except ImportError:
+    # Fallback if import fails
+    from enum import Enum
+    class Track(Enum):
+        SENSORS = 'SENSORS'
+        MAP = 'MAP'
+    
+    # Fallback SensorInterface
+    class SensorInterface:
+        def __init__(self):
+            self._sensor_data = {}
+        
+        def __call__(self, sensor_id, sensor_type, data):
+            self._sensor_data[sensor_id] = data
+
 
 class DoraUDPBridge:
     """UDP Communication Bridge between CARLA and DORA"""
@@ -98,23 +117,62 @@ class CarlaDoraAgent:
     This agent follows the CARLA Leaderboard API
     """
     
-    def __init__(self):
-        """Initialize the agent"""
+    def __init__(self, host='localhost', port=2000, debug=False):
+        """
+        Initialize the agent
+        
+        Args:
+            host: CARLA server host (required by Leaderboard)
+            port: CARLA server port (required by Leaderboard)
+            debug: Debug mode flag (required by Leaderboard)
+        """
+        self.host = host
+        self.port = port
+        self.debug = debug
         self.bridge = None
         self.step_count = 0
-        print("[CarlaDoraAgent] Agent initialized")
+        self.sensor_interface = SensorInterface()
+        print(f"[CarlaDoraAgent] Agent initialized (host={host}, port={port}, debug={debug})")
     
     def setup(self, path_to_conf_file: str):
         """
-        Setup the agent with configuration file
+        Initialize agent with configuration file
         
         Args:
             path_to_conf_file: Path to configuration file
         """
         print(f"[CarlaDoraAgent] Setup with config: {path_to_conf_file}")
         
+        # Set track type (required by Leaderboard)
+        self.track = Track.SENSORS
+        
         # Initialize UDP bridge
         self.bridge = DoraUDPBridge()
+    
+    def set_global_plan(self, global_plan_gps, global_plan_world_coord):
+        """
+        Set the global route plan for the agent.
+        Required by Leaderboard framework.
+        
+        Args:
+            global_plan_gps: List of GPS waypoints
+            global_plan_world_coord: List of world coordinates
+        """
+        self.global_plan_gps = global_plan_gps
+        self.global_plan_world_coord = global_plan_world_coord
+        print(f"[CarlaDoraAgent] Global plan set with {len(global_plan_gps)} waypoints")
+    
+    @staticmethod
+    def get_ros_version():
+        """
+        Returns the ROS version used by the agent.
+        Required by Leaderboard 2.0 framework.
+        
+        Returns:
+            int: 1 for ROS1, 2 for ROS2, or None if not using ROS
+        """
+        # We're not using ROS, we use DORA dataflow framework
+        return None
         
     def sensors(self) -> list:
         """
@@ -128,12 +186,14 @@ class CarlaDoraAgent:
             {
                 'type': 'sensor.other.gnss',
                 'x': 0.0, 'y': 0.0, 'z': 0.0,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'id': 'GPS'
             },
             # IMU sensor
             {
                 'type': 'sensor.other.imu',
                 'x': 0.0, 'y': 0.0, 'z': 0.0,
+                'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0,
                 'id': 'IMU'
             },
             # Speedometer
@@ -154,7 +214,7 @@ class CarlaDoraAgent:
         
         return sensors
     
-    def run_step(self, input_data: Dict, timestamp: float) -> Dict[str, float]:
+    def run_step(self, input_data: Dict, timestamp: float):
         """
         Execute one step of navigation
         
@@ -163,8 +223,10 @@ class CarlaDoraAgent:
             timestamp: Current timestamp
             
         Returns:
-            Dictionary with control commands (throttle, steer, brake)
+            carla.VehicleControl object
         """
+        import carla
+        
         self.step_count += 1
         
         # Extract and package sensor data
@@ -176,18 +238,23 @@ class CarlaDoraAgent:
         if self.bridge:
             self.bridge.send_sensor_data(sensor_data)
             
-            # Receive control command from DORA
-            control = self.bridge.receive_control()
+            # Receive control command from DORA (dict format)
+            control_dict = self.bridge.receive_control()
             
-            if control:
+            if control_dict:
+                # Convert dict to carla.VehicleControl
+                control = carla.VehicleControl()
+                control.throttle = control_dict.get('throttle', 0.0)
+                control.steer = control_dict.get('steer', 0.0)
+                control.brake = control_dict.get('brake', 0.0)
                 return control
         
-        # Default control (fallback)
-        return {
-            'throttle': 0.0,
-            'steer': 0.0,
-            'brake': 1.0
-        }
+        # Default control (fallback) - safe stop
+        control = carla.VehicleControl()
+        control.throttle = 0.0
+        control.steer = 0.0
+        control.brake = 1.0
+        return control
     
     def _extract_sensor_data(self, input_data: Dict) -> Dict[str, Any]:
         """
